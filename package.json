@@ -1,18 +1,29 @@
 {
-  "name": "fb-messenger-chatbot",
-  "version": "1.0.0",
-  "description": "Facebook Messenger chatbot for Mongolian ecom shop",
-  "main": "index.js",
+  "name": "toglooomiin-tavtsan",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Монгол хэл дээрх онлайн тоглоомын вэбсайт (playboard.gg-с санаа авсан)",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.20.0",
-    "axios": "^1.6.0",
-    "express": "^4.18.0"
+    "@supabase/supabase-js": "^2.45.4",
+    "next": "14.2.35",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "nodemon": "^3.0.0"
+    "@types/node": "^20.14.15",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "14.2.35",
+    "postcss": "^8.4.41",
+    "tailwindcss": "^3.4.9",
+    "typescript": "^5.5.4"
   }
 }
