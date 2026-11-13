@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DEFAULT_PROMPT, PROMPT_MAX, profilePath } from "@/lib/zurvas/config";
+import GiftList, { type InboxGift } from "@/components/zurvas/GiftList";
 import { api, timeAgo } from "@/lib/zurvas/client";
 import { renderStoryImage, shareOrDownload } from "@/lib/zurvas/storyImage";
 
@@ -17,6 +18,7 @@ interface InboxProps {
   username: string;
   prompt: string | null;
   messages: InboxMessage[];
+  gifts: InboxGift[];
 }
 
 const ghostButton =
@@ -24,7 +26,7 @@ const ghostButton =
 const goldButton =
   "rounded-full bg-gradient-to-r from-mongol-gold to-mongol-gold-light px-4 py-2 text-sm font-semibold text-mongol-blue transition disabled:opacity-50";
 
-export default function Inbox({ username, prompt: initialPrompt, messages: initial }: InboxProps) {
+export default function Inbox({ username, prompt: initialPrompt, messages: initial, gifts }: InboxProps) {
   const router = useRouter();
   const [messages, setMessages] = useState(initial);
   const [prompt, setPrompt] = useState(initialPrompt ?? "");
@@ -151,6 +153,8 @@ export default function Inbox({ username, prompt: initialPrompt, messages: initi
           {notice}
         </p>
       ) : null}
+
+      <GiftList gifts={gifts} />
 
       {/* Зурвасууд */}
       <section className="flex flex-col gap-4">

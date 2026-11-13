@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import SiteHeader from "@/components/SiteHeader";
+import type { InboxGift } from "@/components/zurvas/GiftList";
 import Inbox from "@/components/zurvas/Inbox";
 import { getCurrentUser } from "@/lib/zurvas/auth";
 import { INBOX_LIMIT } from "@/lib/zurvas/config";
@@ -22,6 +23,22 @@ export default async function InboxPage() {
   // Энэ удаа "Шинэ" гэж харуулаад, дараагийн удаад уншсан болгоно.
   if (messages.some((m) => !m.readAt)) await store.markAllRead(user.id);
 
+  const now = new Date().toISOString();
+  const gifts: InboxGift[] = (await store.listGifts(user.id)).map((g) => {
+    const state =
+      g.status === "redeemed" ? "redeemed" : (g.expiresAt ?? "") <= now ? "expired" : "active";
+    return {
+      id: g.id,
+      productId: g.productId,
+      senderName: g.senderName,
+      senderVerified: g.senderVerified,
+      note: g.note,
+      state,
+      expiresAt: g.expiresAt ?? now,
+      redeemCode: state === "active" ? g.redeemCode : null,
+    };
+  });
+
   return (
     <div className="flex min-h-screen flex-col">
       <SiteHeader />
@@ -31,6 +48,7 @@ export default async function InboxPage() {
           username={user.username}
           prompt={user.prompt}
           // senderHash-г клиент рүү хэзээ ч дамжуулахгүй.
+          gifts={gifts}
           messages={messages.map((m) => ({
             id: m.id,
             body: m.body,

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import SendForm from "@/components/zurvas/SendForm";
-import { DEFAULT_PROMPT, USERNAME_REGEX, normalizeUsername } from "@/lib/zurvas/config";
+import { DEFAULT_PROMPT, USERNAME_REGEX, normalizeUsername, profilePath } from "@/lib/zurvas/config";
 import { getStore } from "@/lib/zurvas/store";
 
 export const dynamic = "force-dynamic";
@@ -31,6 +32,12 @@ export default async function ProfilePage({ params }: Props) {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center px-4 py-10">
       <SendForm username={user.username} prompt={user.prompt || DEFAULT_PROMPT} />
+      <Link
+        href={`${profilePath(user.username)}/gift`}
+        className="mt-4 rounded-full border border-mongol-gold/50 px-6 py-3 text-center font-semibold text-mongol-gold-light transition hover:border-mongol-gold"
+      >
+        ☕ Кофе бэлэглэх
+      </Link>
       <p className="mt-8 text-center text-xs text-white/40">
         💌 Нууц зурвас · Бусдыг доромжилсон, заналхийлсэн зурвас илгээхийг хориглоно.
       </p>
