@@ -13,6 +13,9 @@
 .env.local
 .env.*.local
 
+# local dev data (zurvas file store)
+/.data/
+
 # misc
 .DS_Store
 *.pem

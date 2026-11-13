@@ -10,7 +10,10 @@ export default function SiteHeader() {
             Тоглоомын Тавцан
           </span>
         </Link>
-        <nav className="text-sm text-white/70">
+        <nav className="flex items-center gap-4 text-sm text-white/70">
+          <Link href="/zurvas" className="font-medium text-mongol-gold-light hover:underline">
+            💌 Нууц зурвас
+          </Link>
           <span className="hidden sm:inline">playboard.mn</span>
         </nav>
       </div>

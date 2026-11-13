@@ -1,3 +1,4 @@
+import Link from "next/link";
 import SiteHeader from "@/components/SiteHeader";
 import GameCard from "@/components/GameCard";
 import AdBanner from "@/components/AdBanner";
@@ -23,6 +24,24 @@ export default function HomePage() {
           {games.map((game) => (
             <GameCard key={game.id} game={game} />
           ))}
+        </section>
+
+        <section className="mt-10">
+          <Link
+            href="/zurvas"
+            className="flex items-center gap-4 rounded-2xl border border-mongol-gold/30 bg-mongol-blue-light/50 p-5 transition hover:border-mongol-gold"
+          >
+            <span className="text-4xl">💌</span>
+            <span className="flex-1">
+              <span className="block text-lg font-semibold text-white">Нууц зурвас</span>
+              <span className="block text-sm text-white/60">
+                Өөрийн линкийг үүсгээд найзуудаасаа нэрээ нууцалсан зурвас аваарай.
+              </span>
+            </span>
+            <span className="rounded-full bg-mongol-gold px-3 py-1 text-xs font-semibold text-mongol-blue">
+              Эхлэх
+            </span>
+          </Link>
         </section>
 
         <section className="mt-12">
