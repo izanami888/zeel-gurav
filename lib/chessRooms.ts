@@ -39,7 +39,7 @@ export function normalizeRoomId(value: string): string | null {
  * Тоглогчийн нууц ID-г хүснэгтэд шууд хадгалахгүй, зөвхөн hash-ийг нь
  * хадгална. Ингэснээр хүснэгтийг уншсан хүн бусдын ID-г мэдэж чадахгүй.
  */
-function hashPlayerId(playerId: string): string {
+export function hashPlayerId(playerId: string): string {
   return createHash("sha256").update(playerId).digest("hex");
 }
 
@@ -49,7 +49,7 @@ function roleOf(room: ChessRoom, playerHash: string): Role {
   return "spectator";
 }
 
-function generateRoomId(): string {
+export function generateRoomId(): string {
   let id = "";
   for (let i = 0; i < ID_LENGTH; i++) {
     id += ID_ALPHABET[randomInt(ID_ALPHABET.length)];
