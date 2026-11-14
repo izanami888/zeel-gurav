@@ -3,8 +3,8 @@ import SiteHeader from "@/components/SiteHeader";
 
 // Онлайн олон тоглогчийн (playroom) маршрут — scaffold only.
 // Бодит логик хийгдээгүй, зөвхөн "Тун удахгүй" харуулна.
-// Хэрэгжүүлэх үед: lib/realtime.ts дахь joinGameRoom-г ашиглан
-// roomId-аар Supabase Realtime сувагт холбогдоно.
+// Хэрэгжүүлэх үед шатрын онлайн өрөөг жишээ болгоно
+// (components/games/OnlineChessGame.tsx, lib/realtime.ts).
 export default function TicTacToeRoomPage({
   params,
 }: {
