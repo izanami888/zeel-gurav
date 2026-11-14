@@ -1,6 +1,7 @@
 import Link from "next/link";
 import SiteHeader from "@/components/SiteHeader";
 import ChessGame from "@/components/games/ChessGame";
+import { isOnlineConfigured } from "@/lib/supabaseAdmin";
 
 export const metadata = {
   title: "Шатар — Тоглоомын Тавцан",
@@ -20,7 +21,7 @@ export default function ChessPage() {
           <span className="w-12" />
         </div>
 
-        <ChessGame />
+        <ChessGame onlineEnabled={isOnlineConfigured()} />
       </main>
     </div>
   );
