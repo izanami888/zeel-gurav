@@ -54,7 +54,14 @@ export interface RoomSession {
   role: Role;
 }
 
-async function postRoom(path: string, body: object): Promise<RoomSession> {
+/**
+ * Өрөөний API руу тоглогчийн ID-тай POST илгээнэ. Амжилтгүй бол алдааны
+ * кодыг (эсвэл "network" / "server_error") буцаана.
+ */
+export async function postRoomApi<T>(
+  path: string,
+  body: object
+): Promise<{ data: T } | { error: string }> {
   let response: Response;
   try {
     response = await fetch(path, {
@@ -63,14 +70,20 @@ async function postRoom(path: string, body: object): Promise<RoomSession> {
       body: JSON.stringify({ playerId: getPlayerId(), ...body }),
     });
   } catch {
-    throw new RoomError("network");
+    return { error: "network" };
   }
 
   const data = await response.json().catch(() => null);
   if (!response.ok || !data?.room) {
-    throw new RoomError((data?.error as RoomErrorCode) ?? "server_error");
+    return { error: (data?.error as string) ?? "server_error" };
   }
-  return data as RoomSession;
+  return { data: data as T };
+}
+
+async function postRoom(path: string, body: object): Promise<RoomSession> {
+  const result = await postRoomApi<RoomSession>(path, body);
+  if ("error" in result) throw new RoomError(result.error as RoomErrorCode);
+  return result.data;
 }
 
 export function createChessRoom(color: ColorChoice): Promise<RoomSession> {
@@ -102,6 +115,58 @@ export async function fetchChessRoom(roomId: string): Promise<ChessRoom | null> 
   return data as ChessRoom;
 }
 
+interface RoomRowHandlers<Row, Presence> {
+  /** Өрөөний мөр өөрчлөгдөх бүрд. */
+  onRoom: (room: Row) => void;
+  /** Одоо холбогдсон байгаа хүмүүсийн зарласан мэдээлэл. */
+  onPresence: (entries: Presence[]) => void;
+  /** Realtime холболт тогтсон / тасарсан үед. */
+  onConnection: (connected: boolean) => void;
+}
+
+/**
+ * Өрөөний хүснэгтийн нэг мөрийг Realtime-аар сонсож, өөрийгөө presence-д
+ * зарлана. Буцаасан функцийг дуудаж салгана. Supabase тохируулаагүй бол
+ * юу ч хийхгүй. Онлайн горимтой бүх тоглоом үүнийг ашиглана.
+ */
+export function subscribeToRoomRow<Row, Presence extends object>(
+  table: string,
+  roomId: string,
+  /** Нууц playerId-г биш, зөвхөн нийтэд ил байж болох зүйлийг зарлана. */
+  presence: Presence,
+  handlers: RoomRowHandlers<Row, Presence>
+): () => void {
+  const client = supabase;
+  if (!client) return () => {};
+
+  const channel = client.channel(`${table}:${roomId}`, {
+    config: { presence: { key: randomId() } },
+  });
+
+  channel
+    .on(
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table, filter: `id=eq.${roomId}` },
+      (payload) => handlers.onRoom(payload.new as Row)
+    )
+    .on("presence", { event: "sync" }, () => {
+      const state = channel.presenceState<Presence>();
+      handlers.onPresence(Object.values(state).flat() as Presence[]);
+    })
+    .subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        handlers.onConnection(true);
+        void channel.track(presence);
+      } else {
+        handlers.onConnection(false);
+      }
+    });
+
+  return () => {
+    void client.removeChannel(channel);
+  };
+}
+
 interface RoomSubscriptionHandlers {
   /** Өрөөний мөр өөрчлөгдөх бүрд. */
   onRoom: (room: ChessRoom) => void;
@@ -111,54 +176,26 @@ interface RoomSubscriptionHandlers {
   onConnection: (connected: boolean) => void;
 }
 
-/**
- * Өрөөний Realtime сувагт холбогдоно. Буцаасан функцийг дуудаж салгана.
- * Supabase тохируулаагүй бол юу ч хийхгүй.
- */
+/** Шатрын өрөөний Realtime сувагт холбогдоно. */
 export function subscribeToChessRoom(
   roomId: string,
   role: Role,
   handlers: RoomSubscriptionHandlers
 ): () => void {
-  const client = supabase;
-  if (!client) return () => {};
-
-  const channel = client.channel(`chess-room:${roomId}`, {
-    config: { presence: { key: randomId() } },
-  });
-
-  channel
-    .on(
-      "postgres_changes",
-      {
-        event: "UPDATE",
-        schema: "public",
-        table: "chess_rooms",
-        filter: `id=eq.${roomId}`,
-      },
-      (payload) => handlers.onRoom(payload.new as ChessRoom)
-    )
-    .on("presence", { event: "sync" }, () => {
-      const online = new Set<Color>();
-      const state = channel.presenceState<{ role: Role }>();
-      for (const entries of Object.values(state)) {
+  return subscribeToRoomRow<ChessRoom, { role: Role }>(
+    "chess_rooms",
+    roomId,
+    { role },
+    {
+      onRoom: handlers.onRoom,
+      onConnection: handlers.onConnection,
+      onPresence: (entries) => {
+        const online = new Set<Color>();
         for (const entry of entries) {
           if (entry.role === "w" || entry.role === "b") online.add(entry.role);
         }
-      }
-      handlers.onPresence(online);
-    })
-    .subscribe((status) => {
-      if (status === "SUBSCRIBED") {
-        handlers.onConnection(true);
-        // Нууц playerId-г биш, зөвхөн өнгөө л зарлана.
-        void channel.track({ role });
-      } else {
-        handlers.onConnection(false);
-      }
-    });
-
-  return () => {
-    void client.removeChannel(channel);
-  };
+        handlers.onPresence(online);
+      },
+    }
+  );
 }

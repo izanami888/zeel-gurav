@@ -1,6 +1,7 @@
 import Link from "next/link";
 import SiteHeader from "@/components/SiteHeader";
 import ChuluuGame from "@/components/games/ChuluuGame";
+import { isOnlineConfigured } from "@/lib/supabaseAdmin";
 
 export const metadata = {
   title: "Чулуу таалцах — Тоглоомын Тавцан",
@@ -20,7 +21,7 @@ export default function ChuluuPage() {
           <span className="w-12" />
         </div>
 
-        <ChuluuGame />
+        <ChuluuGame onlineEnabled={isOnlineConfigured()} />
       </main>
     </div>
   );

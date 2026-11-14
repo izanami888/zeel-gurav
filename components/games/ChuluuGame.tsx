@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   DEFAULT_SETTINGS,
   MAX_HIDE_OPTIONS,
@@ -29,6 +30,7 @@ import {
   NumberPad,
   PRIMARY_BUTTON,
   PassScreen,
+  PlayerRow,
   RulesDialog,
   SECONDARY_BUTTON,
   SectionLabel,
@@ -36,6 +38,13 @@ import {
   optionClass,
   type FistState,
 } from "@/components/games/chuluu/ChuluuParts";
+import { CHULUU_ERROR_MESSAGE } from "@/games/chuluu/online";
+import {
+  ChuluuRoomError,
+  createChuluuRoom,
+  loadSavedName,
+  saveName,
+} from "@/lib/chuluuOnline";
 import ResultShareCard from "@/components/ResultShareCard";
 
 const GAME_NAME = "Чулуу таалцах";
@@ -43,7 +52,7 @@ const GAME_NAME = "Чулуу таалцах";
 type Mode = "pass" | "computer";
 
 interface SetupState {
-  mode: Mode;
+  mode: Mode | "online";
   playerCount: number;
   names: string[];
   humanName: string;
@@ -91,15 +100,39 @@ function RulesButton({ onClick }: { onClick: () => void }) {
 
 function SetupScreen({
   initial,
+  onlineEnabled,
   onStart,
   onShowRules,
 }: {
   initial: SetupState;
+  onlineEnabled: boolean;
   onStart: (setup: SetupState) => void;
   onShowRules: () => void;
 }) {
+  const router = useRouter();
   const [setup, setSetup] = useState(initial);
+  const [onlineName, setOnlineName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const { mode, settings } = setup;
+
+  useEffect(() => {
+    setOnlineName(loadSavedName());
+  }, []);
+
+  async function handleCreateRoom() {
+    setCreating(true);
+    setCreateError(null);
+    try {
+      saveName(onlineName.trim());
+      const { room } = await createChuluuRoom(onlineName, settings);
+      router.push(`/games/chuluu/room/${room.id}`);
+    } catch (error) {
+      const code = error instanceof ChuluuRoomError ? error.code : "server_error";
+      setCreateError(CHULUU_ERROR_MESSAGE[code]);
+      setCreating(false);
+    }
+  }
   const update = (patch: Partial<SetupState>) =>
     setSetup((prev) => ({ ...prev, ...patch }));
   const updateSettings = (patch: Partial<ChuluuSettings>) =>
@@ -132,9 +165,36 @@ function SetupScreen({
         >
           🤖 Компьютертэй тоглох
         </button>
+        {onlineEnabled && (
+          <button
+            type="button"
+            aria-pressed={mode === "online"}
+            onClick={() => update({ mode: "online" })}
+            className={optionClass(mode === "online")}
+          >
+            🌐 Онлайн тоглох
+          </button>
+        )}
       </fieldset>
 
-      {mode === "pass" ? (
+      {mode === "online" ? (
+        <fieldset>
+          <SectionLabel>Таны нэр</SectionLabel>
+          <input
+            type="text"
+            maxLength={14}
+            value={onlineName}
+            placeholder="Тоглогч 1"
+            aria-label="Таны нэр"
+            onChange={(event) => setOnlineName(event.target.value)}
+            className="w-full rounded-xl border border-mongol-gold/30 bg-mongol-blue/60 px-4 py-3 text-base text-white placeholder:text-white/30 focus:border-mongol-gold focus:outline-none"
+          />
+          <p className="mt-3 text-xs leading-relaxed text-white/50">
+            Өрөө үүсгээд холбоос эсвэл QR кодоо найзууддаа илгээнэ. 2–6 хүн
+            орж болно. Бүгд орсны дараа та эхлүүлнэ.
+          </p>
+        </fieldset>
+      ) : mode === "pass" ? (
         <>
           <fieldset>
             <SectionLabel>Тоглогчийн тоо</SectionLabel>
@@ -270,9 +330,26 @@ function SetupScreen({
         )}
       </fieldset>
 
-      <button type="button" onClick={() => onStart(setup)} className={PRIMARY_BUTTON}>
-        Эхлэх
-      </button>
+      {createError && (
+        <p role="alert" className="text-center text-sm text-red-300">
+          {createError}
+        </p>
+      )}
+
+      {mode === "online" ? (
+        <button
+          type="button"
+          onClick={handleCreateRoom}
+          disabled={creating}
+          className={PRIMARY_BUTTON}
+        >
+          {creating ? "Өрөө үүсгэж байна..." : "Өрөө үүсгэх"}
+        </button>
+      ) : (
+        <button type="button" onClick={() => onStart(setup)} className={PRIMARY_BUTTON}>
+          Эхлэх
+        </button>
+      )}
     </div>
   );
 }
@@ -529,70 +606,26 @@ function Match({
       <ul className="flex flex-col gap-2">
         {players.map((player, seat) => {
           const guess = round.guesses.find((entry) => entry.seat === seat);
-          const isWinner = outcome?.winnerSeat === seat;
-          const delta = outcome && showTransfer ? outcome.delta[seat] : 0;
-          const stones =
-            outcome && showTransfer ? outcome.stonesAfter[seat] : player.stones;
-          const out = !isActive(player);
-
+          const reveal = outcome && showTransfer ? outcome : null;
           return (
-            <li
+            <PlayerRow
               key={seat}
-              className={`flex items-center gap-3 rounded-2xl border px-3 py-2 transition ${
-                isWinner
-                  ? "border-emerald-400 bg-emerald-500/15"
+              name={player.name}
+              isComputer={player.isComputer}
+              stones={reveal ? reveal.stonesAfter[seat] : player.stones}
+              delta={reveal ? reveal.delta[seat] : 0}
+              fist={fistState(seat)}
+              guess={guess ? guess.value : null}
+              highlight={
+                outcome?.winnerSeat === seat
+                  ? "winner"
                   : activeSeat === seat
-                    ? "border-mongol-gold bg-mongol-blue-light/70"
-                    : "border-white/10 bg-mongol-blue-light/40"
-              } ${out ? "opacity-50" : ""}`}
-            >
-              <Fist state={fistState(seat)} />
-
-              <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-1.5 truncate font-semibold text-white">
-                  <span className="truncate">{player.name}</span>
-                  {player.isComputer && <span aria-hidden>🤖</span>}
-                  {round.order[0] === seat && phase.name !== "reveal" && (
-                    <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-medium text-white/70">
-                      эхэлж таана
-                    </span>
-                  )}
-                  {out && (
-                    <span className="shrink-0 rounded-full bg-red-500/20 px-2 py-0.5 text-[10px] font-medium text-red-200">
-                      хасагдсан
-                    </span>
-                  )}
-                </p>
-                <div className="mt-1 flex items-center gap-2">
-                  <StonePile count={stones} />
-                  {delta !== 0 && (
-                    <span
-                      className={`animate-stone-pop text-sm font-bold ${
-                        delta > 0 ? "text-emerald-300" : "text-red-300"
-                      }`}
-                    >
-                      {delta > 0 ? `+${delta}` : delta}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex w-14 shrink-0 flex-col items-center">
-                <span className="text-[10px] uppercase tracking-wide text-white/40">
-                  Таамаг
-                </span>
-                <span
-                  className={`text-2xl font-bold tabular-nums ${
-                    isWinner ? "text-emerald-300" : guess ? "text-white" : "text-white/20"
-                  }`}
-                  aria-label={
-                    guess ? `${player.name}-ийн таамаг ${guess.value}` : undefined
-                  }
-                >
-                  {guess ? guess.value : "–"}
-                </span>
-              </div>
-            </li>
+                    ? "active"
+                    : null
+              }
+              out={!isActive(player)}
+              firstGuesser={round.order[0] === seat && phase.name !== "reveal"}
+            />
           );
         })}
       </ul>
@@ -743,7 +776,11 @@ function Match({
   );
 }
 
-export default function ChuluuGame() {
+export default function ChuluuGame({
+  onlineEnabled = false,
+}: {
+  onlineEnabled?: boolean;
+}) {
   const [setup, setSetup] = useState(INITIAL_SETUP);
   const [playing, setPlaying] = useState(false);
   const [matchKey, setMatchKey] = useState(0);
@@ -754,7 +791,7 @@ export default function ChuluuGame() {
       {playing ? (
         <Match
           key={matchKey}
-          mode={setup.mode}
+          mode={setup.mode === "computer" ? "computer" : "pass"}
           initialPlayers={buildPlayers(setup)}
           settings={setup.settings}
           onRestart={() => setMatchKey((key) => key + 1)}
@@ -764,6 +801,7 @@ export default function ChuluuGame() {
       ) : (
         <SetupScreen
           initial={setup}
+          onlineEnabled={onlineEnabled}
           onStart={(next) => {
             setSetup(next);
             setMatchKey((key) => key + 1);

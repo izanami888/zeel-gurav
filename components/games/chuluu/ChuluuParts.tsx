@@ -245,3 +245,103 @@ export function SectionLabel({ children }: { children: ReactNode }) {
     </legend>
   );
 }
+
+export interface PlayerRowProps {
+  name: string;
+  stones: number;
+  fist: FistState;
+  /** Таамаг: тоо, эсвэл хараахан таагаагүй бол null. */
+  guess: number | null;
+  /** Ээлж нь алгасагдсан (онлайн горимд холболт тасарсан үед). */
+  guessSkipped?: boolean;
+  /** Энэ үед чулууны өөрчлөлт (+2, -1); 0 бол харуулахгүй. */
+  delta?: number;
+  highlight?: "winner" | "active" | null;
+  out?: boolean;
+  isComputer?: boolean;
+  isMe?: boolean;
+  firstGuesser?: boolean;
+  offline?: boolean;
+  /** Нэрийн доорх жижиг төлөв, жишээ нь "сонгож байна...". */
+  status?: string;
+}
+
+/** Тоглогчийн мөр: гар, нэр, чулуу, таамаг. Бүх горимд ашиглана. */
+export function PlayerRow({
+  name,
+  stones,
+  fist,
+  guess,
+  guessSkipped = false,
+  delta = 0,
+  highlight = null,
+  out = false,
+  isComputer = false,
+  isMe = false,
+  firstGuesser = false,
+  offline = false,
+  status,
+}: PlayerRowProps) {
+  const badge = "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium";
+  return (
+    <li
+      className={`flex items-center gap-3 rounded-2xl border px-3 py-2 transition ${
+        highlight === "winner"
+          ? "border-emerald-400 bg-emerald-500/15"
+          : highlight === "active"
+            ? "border-mongol-gold bg-mongol-blue-light/70"
+            : "border-white/10 bg-mongol-blue-light/40"
+      } ${out ? "opacity-50" : ""}`}
+    >
+      <Fist state={fist} />
+
+      <div className="min-w-0 flex-1">
+        <p className="flex flex-wrap items-center gap-1.5 font-semibold text-white">
+          <span className="max-w-full truncate">{name}</span>
+          {isComputer && <span aria-hidden>🤖</span>}
+          {isMe && <span className={`${badge} bg-mongol-gold/20 text-mongol-gold-light`}>та</span>}
+          {firstGuesser && (
+            <span className={`${badge} bg-white/10 text-white/70`}>эхэлж таана</span>
+          )}
+          {out && <span className={`${badge} bg-red-500/20 text-red-200`}>хасагдсан</span>}
+          {offline && !out && (
+            <span className={`${badge} bg-red-500/20 text-red-200`}>холболтгүй</span>
+          )}
+        </p>
+        <div className="mt-1 flex items-center gap-2">
+          <StonePile count={stones} />
+          {delta !== 0 && (
+            <span
+              className={`animate-stone-pop text-sm font-bold ${
+                delta > 0 ? "text-emerald-300" : "text-red-300"
+              }`}
+            >
+              {delta > 0 ? `+${delta}` : delta}
+            </span>
+          )}
+        </div>
+        {status && <p className="mt-0.5 text-xs text-white/60">{status}</p>}
+      </div>
+
+      <div className="flex w-14 shrink-0 flex-col items-center">
+        <span className="text-[10px] uppercase tracking-wide text-white/40">Таамаг</span>
+        {guessSkipped ? (
+          <span className="mt-1 text-[11px] font-medium text-white/50">алгассан</span>
+        ) : (
+          <span
+            className={`text-2xl font-bold tabular-nums ${
+              highlight === "winner"
+                ? "text-emerald-300"
+                : guess !== null
+                  ? "text-white"
+                  : "text-white/20"
+            }`}
+            aria-label={guess !== null ? `${name}-ийн таамаг ${guess}` : undefined}
+          >
+            {guess !== null ? guess : "–"}
+          </span>
+        )}
+      </div>
+    </li>
+  );
+}
