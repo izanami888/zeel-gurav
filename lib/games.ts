@@ -20,6 +20,14 @@ export const games: GameMeta[] = [
     status: "available",
   },
   {
+    id: "chess",
+    name: "Шатар",
+    description: "Сонгодог шатар. Нэг төхөөрөмж дээр 2 тоглогч ээлжлэн нүүнэ.",
+    href: "/games/chess",
+    emoji: "♟️",
+    status: "available",
+  },
+  {
     id: "checkers",
     name: "Шашки",
     description: "Тун удахгүй нэмэгдэнэ.",
@@ -33,14 +41,6 @@ export const games: GameMeta[] = [
     description: "Тун удахгүй нэмэгдэнэ.",
     href: "#",
     emoji: "🟡",
-    status: "soon",
-  },
-  {
-    id: "chess",
-    name: "Шатар",
-    description: "Тун удахгүй нэмэгдэнэ.",
-    href: "#",
-    emoji: "♟️",
     status: "soon",
   },
 ];
