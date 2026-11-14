@@ -82,7 +82,7 @@ function RulesButton({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="rounded-full border border-mongol-gold/40 px-4 py-1.5 text-sm font-medium text-mongol-gold-light transition active:scale-95"
+      className="shrink-0 whitespace-nowrap rounded-full border border-mongol-gold/40 px-4 py-1.5 text-sm font-medium text-mongol-gold-light transition active:scale-95"
     >
       📖 Дүрэм
     </button>
