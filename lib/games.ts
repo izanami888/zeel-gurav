@@ -28,6 +28,14 @@ export const games: GameMeta[] = [
     status: "available",
   },
   {
+    id: "chuluu",
+    name: "Чулуу таалцах",
+    description: "Гартаа чулуу нууж, нийт хэдэн чулуу байгааг таах уламжлалт тоглоом. 2–6 тоглогч эсвэл компьютертэй.",
+    href: "/games/chuluu",
+    emoji: "✊",
+    status: "available",
+  },
+  {
     id: "checkers",
     name: "Шашки",
     description: "Тун удахгүй нэмэгдэнэ.",
