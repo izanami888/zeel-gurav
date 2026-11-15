@@ -36,6 +36,14 @@ export const games: GameMeta[] = [
     status: "available",
   },
   {
+    id: "mori",
+    name: "Морь уралдуулах",
+    description: "Шагай хаяж, морио барианд түрүүлж оруулах уламжлалт тоглоом. 2–6 тоглогч эсвэл компьютертэй.",
+    href: "/games/mori",
+    emoji: "🏇",
+    status: "available",
+  },
+  {
     id: "checkers",
     name: "Шашки",
     description: "Тун удахгүй нэмэгдэнэ.",
