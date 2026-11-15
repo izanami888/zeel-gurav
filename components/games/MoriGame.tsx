@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   DEFAULT_SETTINGS,
   MAX_PLAYERS,
@@ -20,20 +21,31 @@ import {
   type MoriSettings,
   type MoveResult,
   type RaceState,
-  type RollOutcome,
   type Side,
 } from "@/games/mori/logic";
+import { MORI_ERROR_MESSAGE } from "@/games/mori/online";
 import {
+  BERKH_MS,
   BerkhCelebration,
+  FINISH_MS,
+  FinalPlaces,
   HORSE_COLORS,
   HorseToken,
+  NO_MOVE_MS,
+  OpeningBoard,
+  PUSH_MS,
+  REVEAL_MS,
+  ROLL_MS,
   RankingList,
+  RollPanel,
   RulesButton,
   RulesDialog,
-  SIDE_EMOJI,
-  ShagaiRow,
+  SETTLE_MS,
+  STEP_MS,
   TEXT_INPUT,
   Track,
+  TurnHeader,
+  describeRoll,
   horseLabel,
 } from "@/components/games/mori/MoriParts";
 import {
@@ -43,6 +55,9 @@ import {
   SectionLabel,
   optionClass,
 } from "@/components/games/ui";
+import { MAX_NAME_LENGTH } from "@/games/chuluu/online";
+import { loadSavedName, saveName } from "@/lib/chuluuOnline";
+import { MoriRoomError, createMoriRoom } from "@/lib/moriOnline";
 import ResultShareCard from "@/components/ResultShareCard";
 
 const GAME_NAME = "Морь уралдуулах";
@@ -50,7 +65,7 @@ const GAME_NAME = "Морь уралдуулах";
 type Mode = "pass" | "computer";
 
 interface SetupState {
-  mode: Mode;
+  mode: Mode | "online";
   playerCount: number;
   names: string[];
   humanName: string;
@@ -73,16 +88,6 @@ const TRACK_LENGTH_HINT: Record<number, string> = {
   30: "Урт",
 };
 
-// Хөдөлгөөний хугацаа (мс).
-const ROLL_MS = 850; // шагай эргэлдэх
-const REVEAL_MS = 950; // буусан талыг уншуулах
-const NO_MOVE_MS = 1200; // морь буугаагүйг уншуулах
-const BERKH_MS = 2700; // дөрвөн бэрхийн баяр
-const STEP_MS = 320; // морины нэг алхам
-const PUSH_MS = 900; // түлхэгдсэн морь ухрах
-const SETTLE_MS = 550; // дараагийн ээлж рүү шилжих
-const FINISH_MS = 1500; // барианд орсныг харуулах
-
 /** Компьютер шагайгаа хаяхаас өмнө бага зэрэг хүлээнэ. */
 function computerDelay(): number {
   return 700 + Math.random() * 500;
@@ -104,25 +109,41 @@ function buildPlayers(setup: SetupState): MoriPlayer[] {
   ];
 }
 
-/** Хаялтын үр дүн үгээр: "2 морь — 2 алхам урагшаа". */
-function describeRoll(outcome: RollOutcome): string {
-  if (outcome.durvunBerkh) return `Дөрвөн бэрх — ${outcome.steps} алхам урагшаа!`;
-  if (outcome.horses === 0) return "Морь буусангүй — хөдлөхгүй";
-  const text = `${outcome.horses} морь — ${outcome.steps} алхам урагшаа`;
-  return outcome.rollAgain ? `${text}, дахин хаяна!` : text;
-}
-
 function SetupScreen({
   initial,
+  onlineEnabled,
   onStart,
   onShowRules,
 }: {
   initial: SetupState;
+  onlineEnabled: boolean;
   onStart: (setup: SetupState) => void;
   onShowRules: () => void;
 }) {
+  const router = useRouter();
   const [setup, setSetup] = useState(initial);
+  const [onlineName, setOnlineName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const { mode, settings } = setup;
+
+  useEffect(() => {
+    setOnlineName(loadSavedName());
+  }, []);
+
+  async function handleCreateRoom() {
+    setCreating(true);
+    setCreateError(null);
+    try {
+      saveName(onlineName.trim());
+      const { room } = await createMoriRoom(onlineName, settings);
+      router.push(`/games/mori/room/${room.id}`);
+    } catch (error) {
+      const code = error instanceof MoriRoomError ? error.code : "server_error";
+      setCreateError(MORI_ERROR_MESSAGE[code]);
+      setCreating(false);
+    }
+  }
 
   const update = (patch: Partial<SetupState>) =>
     setSetup((prev) => ({ ...prev, ...patch }));
@@ -156,9 +177,36 @@ function SetupScreen({
         >
           🤖 Компьютертэй тоглох
         </button>
+        {onlineEnabled && (
+          <button
+            type="button"
+            aria-pressed={mode === "online"}
+            onClick={() => update({ mode: "online" })}
+            className={optionClass(mode === "online")}
+          >
+            🌐 Онлайн тоглох
+          </button>
+        )}
       </fieldset>
 
-      {mode === "pass" ? (
+      {mode === "online" ? (
+        <fieldset>
+          <SectionLabel>Таны нэр</SectionLabel>
+          <input
+            type="text"
+            maxLength={MAX_NAME_LENGTH}
+            value={onlineName}
+            placeholder="Тоглогч 1"
+            aria-label="Таны нэр"
+            onChange={(event) => setOnlineName(event.target.value)}
+            className={TEXT_INPUT}
+          />
+          <p className="mt-3 text-xs leading-relaxed text-white/50">
+            Өрөө үүсгээд холбоос эсвэл QR кодоо найзууддаа илгээнэ. 2–6 хүн
+            орж болно. Бүгд орсны дараа та эхлүүлнэ.
+          </p>
+        </fieldset>
+      ) : mode === "pass" ? (
         <>
           <fieldset>
             <SectionLabel>Тоглогчийн тоо</SectionLabel>
@@ -305,47 +353,26 @@ function SetupScreen({
         </button>
       </fieldset>
 
-      <button type="button" onClick={() => onStart(setup)} className={PRIMARY_BUTTON}>
-        Эхлэх
-      </button>
-    </div>
-  );
-}
+      {createError && (
+        <p role="alert" className="text-center text-sm text-red-300">
+          {createError}
+        </p>
+      )}
 
-/** Шагайн мөр + үр дүнгийн үг + том товч. Шодолт, уралдаан хоёуланд нь. */
-function RollPanel({
-  roll,
-  rolling,
-  berkh = false,
-  lead,
-  message,
-  detail,
-  button,
-}: {
-  roll: Side[] | null;
-  rolling: boolean;
-  berkh?: boolean;
-  /** Өгвөл шагайн мөрийн оронд харуулна. */
-  lead?: ReactNode;
-  message: string;
-  detail?: string | null;
-  button: { label: string; onClick?: () => void };
-}) {
-  return (
-    <div className={`flex flex-col items-center gap-3 p-4 text-center ${CARD}`}>
-      {lead ?? <ShagaiRow roll={roll} rolling={rolling} berkh={berkh} />}
-      <div className="flex min-h-[3.25rem] flex-col justify-center" aria-live="polite">
-        <p className="text-lg font-bold leading-snug text-white">{message}</p>
-        {detail && <p className="text-sm leading-snug text-white/60">{detail}</p>}
-      </div>
-      <button
-        type="button"
-        disabled={!button.onClick}
-        onClick={button.onClick}
-        className={`w-full touch-manipulation py-4 text-lg ${PRIMARY_BUTTON}`}
-      >
-        {button.label}
-      </button>
+      {mode === "online" ? (
+        <button
+          type="button"
+          onClick={handleCreateRoom}
+          disabled={creating}
+          className={PRIMARY_BUTTON}
+        >
+          {creating ? "Өрөө үүсгэж байна..." : "Өрөө үүсгэх"}
+        </button>
+      ) : (
+        <button type="button" onClick={() => onStart(setup)} className={PRIMARY_BUTTON}>
+          Эхлэх
+        </button>
+      )}
     </div>
   );
 }
@@ -454,73 +481,20 @@ function OpeningRoll({
 
   return (
     <>
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-bold text-white">Хэн эхлэх вэ?</h2>
-          <p className="text-xs leading-relaxed text-white/60">
-            Бүгд 4 шагай хаяна. Хамгийн олон морь буулгасан нь эхэлнэ.
-          </p>
-        </div>
-        <RulesButton onClick={onShowRules} />
-      </div>
-
-      {tie && stage !== "done" && (
-        <p
-          role="status"
-          className="rounded-xl border border-mongol-gold/40 bg-mongol-gold/10 px-3 py-2 text-center text-sm font-medium text-mongol-gold-light"
-        >
-          Тэнцлээ ({tie.horses} морь)! {tie.seats.map((entry) => players[entry].name).join(", ")}{" "}
-          дахин хаяна.
-        </p>
-      )}
-
-      <ul className="flex flex-col gap-2">
-        {players.map((entry, other) => {
-          const result = rolls[other];
+      <OpeningBoard
+        players={players}
+        rows={players.map((_, other) => {
           const isFirst = stage === "done" && first === other;
-          const isRolling = stage !== "done" && other === seat;
-          const sitsOut = !contenders.includes(other) || (stage === "done" && !isFirst);
-          return (
-            <li
-              key={other}
-              className={`flex items-center gap-3 rounded-2xl border px-3 py-2 transition ${
-                isFirst
-                  ? "border-emerald-400 bg-emerald-500/15"
-                  : isRolling
-                    ? "border-mongol-gold bg-mongol-blue-light/70"
-                    : "border-white/10 bg-mongol-blue-light/40"
-              } ${sitsOut ? "opacity-50" : ""}`}
-            >
-              <HorseToken
-                color={HORSE_COLORS[other]}
-                label={horseLabel(entry.name)}
-                size={30}
-              />
-              <span className="flex min-w-0 flex-1 items-center gap-1.5 font-semibold text-white">
-                <span className="truncate">{entry.name}</span>
-                {entry.isComputer && <span aria-hidden>🤖</span>}
-                {isFirst && (
-                  <span className="shrink-0 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-200">
-                    эхэлнэ
-                  </span>
-                )}
-              </span>
-              {result ? (
-                <>
-                  <span className="text-sm tracking-tight" aria-hidden>
-                    {result.map((side) => SIDE_EMOJI[side]).join("")}
-                  </span>
-                  <span className="w-14 shrink-0 text-right text-sm font-bold tabular-nums text-mongol-gold-light">
-                    {countHorses(result)} морь
-                  </span>
-                </>
-              ) : (
-                <span className="w-14 shrink-0 text-right text-sm text-white/30">–</span>
-              )}
-            </li>
-          );
+          return {
+            roll: rolls[other],
+            mark: isFirst ? "first" : stage !== "done" && other === seat ? "rolling" : null,
+            dim: !contenders.includes(other) || (stage === "done" && !isFirst),
+          };
         })}
-      </ul>
+        tie={stage !== "done" ? tie : null}
+        youSeat={null}
+        onShowRules={onShowRules}
+      />
 
       <RollPanel
         roll={stage === "shown" ? roll : null}
@@ -710,28 +684,14 @@ function Race({
 
   return (
     <>
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <HorseToken
-            color={HORSE_COLORS[headSeat]}
-            label={horseLabel(players[headSeat].name)}
-            size={40}
-          />
-          <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-widest text-mongol-gold-light/80">
-              {stage === "over"
-                ? "Түрүү магнай"
-                : current === youSeat
-                  ? "Таны ээлж"
-                  : "Ээлж"}
-            </p>
-            <p className="truncate text-lg font-bold leading-tight text-white">
-              {players[headSeat].name}
-            </p>
-          </div>
-        </div>
-        <RulesButton onClick={onShowRules} />
-      </div>
+      <TurnHeader
+        players={players}
+        seat={headSeat}
+        label={
+          stage === "over" ? "Түрүү магнай" : current === youSeat ? "Таны ээлж" : "Ээлж"
+        }
+        onShowRules={onShowRules}
+      />
 
       <Track
         players={players}
@@ -802,40 +762,7 @@ function Results({
         onPlayAgain={onRestart}
       />
 
-      <div className={`flex w-full flex-col gap-3 p-4 ${CARD}`}>
-        <p className="text-sm uppercase tracking-widest text-mongol-gold-light/80">
-          Эцсийн байр
-        </p>
-        <ol className="flex flex-col gap-3">
-          {places.map((seat, index) => (
-            <li key={seat} className="flex items-center gap-3">
-              <span
-                className={`w-[4.5rem] shrink-0 whitespace-nowrap text-sm font-bold tabular-nums ${
-                  index === 0 ? "text-mongol-gold-light" : "text-white/60"
-                }`}
-              >
-                {index + 1}-р байр
-              </span>
-              <HorseToken
-                color={HORSE_COLORS[seat]}
-                label={horseLabel(players[seat].name)}
-                size={28}
-              />
-              <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-1.5 font-semibold text-white">
-                  <span className="truncate">{players[seat].name}</span>
-                  {players[seat].isComputer && <span aria-hidden>🤖</span>}
-                </span>
-                {index === 0 && (
-                  <span className="block text-xs font-semibold text-mongol-gold-light">
-                    🏆 Түрүү магнай
-                  </span>
-                )}
-              </span>
-            </li>
-          ))}
-        </ol>
-      </div>
+      <FinalPlaces players={players} places={places} youSeat={null} />
 
       <button type="button" onClick={onChangeSettings} className={SECONDARY_BUTTON}>
         Тохиргоо солих
@@ -914,7 +841,11 @@ function Match({
   );
 }
 
-export default function MoriGame() {
+export default function MoriGame({
+  onlineEnabled = false,
+}: {
+  onlineEnabled?: boolean;
+}) {
   const [setup, setSetup] = useState(INITIAL_SETUP);
   const [playing, setPlaying] = useState(false);
   const [matchKey, setMatchKey] = useState(0);
@@ -926,7 +857,7 @@ export default function MoriGame() {
       {playing ? (
         <Match
           key={matchKey}
-          mode={setup.mode}
+          mode={setup.mode === "computer" ? "computer" : "pass"}
           players={players}
           settings={setup.settings}
           onRestart={() => setMatchKey((key) => key + 1)}
@@ -936,6 +867,7 @@ export default function MoriGame() {
       ) : (
         <SetupScreen
           initial={setup}
+          onlineEnabled={onlineEnabled}
           onStart={(next) => {
             setSetup(next);
             setMatchKey((key) => key + 1);

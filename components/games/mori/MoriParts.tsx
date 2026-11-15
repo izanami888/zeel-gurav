@@ -1,21 +1,42 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import {
   DURVUN_BERKH_STEPS,
   SHAGAI_PER_ROLL,
   SIDES,
   SIDE_NAME,
+  countHorses,
   placeOf,
   standings,
   type MoriPlayer,
   type RaceState,
+  type RollOutcome,
   type Side,
 } from "@/games/mori/logic";
 import { CARD, PRIMARY_BUTTON } from "@/components/games/ui";
 
 // "Морь уралдуулах" тоглоомын UI хэсгүүд: шагайн зураг, морь, зам,
-// байрын жагсаалт, дүрмийн цонх.
+// байрын жагсаалт, дүрмийн цонх. Нэг төхөөрөмжийн болон онлайн горим
+// хоёулаа эдгээрийг ашиглана.
+
+// Хөдөлгөөний хугацаа (мс).
+export const ROLL_MS = 850; // шагай эргэлдэх
+export const REVEAL_MS = 950; // буусан талыг уншуулах
+export const NO_MOVE_MS = 1200; // морь буугаагүйг уншуулах
+export const BERKH_MS = 2700; // дөрвөн бэрхийн баяр
+export const STEP_MS = 320; // морины нэг алхам
+export const PUSH_MS = 900; // түлхэгдсэн морь ухрах
+export const SETTLE_MS = 550; // дараагийн ээлж рүү шилжих
+export const FINISH_MS = 1500; // барианд орсныг харуулах
+
+/** Хаялтын үр дүн үгээр: "2 морь — 2 алхам урагшаа". */
+export function describeRoll(outcome: RollOutcome): string {
+  if (outcome.durvunBerkh) return `Дөрвөн бэрх — ${outcome.steps} алхам урагшаа!`;
+  if (outcome.horses === 0) return "Морь буусангүй — хөдлөхгүй";
+  const text = `${outcome.horses} морь — ${outcome.steps} алхам урагшаа`;
+  return outcome.rollAgain ? `${text}, дахин хаяна!` : text;
+}
 
 /** Суудал бүрийн морины өнгө. */
 export const HORSE_COLORS = [
@@ -498,6 +519,10 @@ export function Track({
   );
 }
 
+const BADGE = "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium";
+const YOU_BADGE = `${BADGE} bg-mongol-gold/20 text-mongol-gold-light`;
+const OFFLINE_BADGE = `${BADGE} bg-red-500/20 text-red-200`;
+
 /** Хэн түрүүлж яваагийн жижиг жагсаалт. */
 export function RankingList({
   players,
@@ -505,13 +530,16 @@ export function RankingList({
   trackLength,
   activeSeat,
   youSeat,
+  offlineSeats,
 }: {
   players: MoriPlayer[];
   race: RaceState;
   trackLength: number;
   activeSeat: number | null;
-  /** Компьютертэй горимд хүний суудал. */
+  /** "та" тэмдэг авах суудал (компьютертэй болон онлайн горимд). */
   youSeat: number | null;
+  /** Онлайн горимд холболт нь тасарсан суудлууд. */
+  offlineSeats?: Set<number>;
 }) {
   const finish = trackLength + 1;
   return (
@@ -524,6 +552,7 @@ export function RankingList({
           const position = race.positions[seat];
           const done = race.finishOrder.includes(seat);
           const place = placeOf(race, seat);
+          const offline = !done && (offlineSeats?.has(seat) ?? false);
           return (
             <li
               key={seat}
@@ -542,24 +571,24 @@ export function RankingList({
               <span className="flex min-w-0 flex-1 items-center gap-1.5 font-medium text-white">
                 <span className="truncate">{players[seat].name}</span>
                 {players[seat].isComputer && <span aria-hidden>🤖</span>}
-                {seat === youSeat && (
-                  <span className="shrink-0 rounded-full bg-mongol-gold/20 px-2 py-0.5 text-[10px] font-medium text-mongol-gold-light">
-                    та
-                  </span>
-                )}
+                {seat === youSeat && <span className={YOU_BADGE}>та</span>}
+                {offline && <span className={OFFLINE_BADGE}>холболтгүй</span>}
               </span>
-              <span
-                className="hidden h-1.5 w-12 shrink-0 overflow-hidden rounded-full bg-white/10 min-[380px]:block"
-                aria-hidden
-              >
+              {/* "холболтгүй" тэмдэгтэй мөрөнд нэрэнд зай үлдээхээр зурвасыг нуув. */}
+              {!offline && (
                 <span
-                  className="block h-full rounded-full transition-all duration-300"
-                  style={{
-                    width: `${(Math.min(position, finish) / finish) * 100}%`,
-                    backgroundColor: HORSE_COLORS[seat],
-                  }}
-                />
-              </span>
+                  className="hidden h-1.5 w-12 shrink-0 overflow-hidden rounded-full bg-white/10 min-[380px]:block"
+                  aria-hidden
+                >
+                  <span
+                    className="block h-full rounded-full transition-all duration-300"
+                    style={{
+                      width: `${(Math.min(position, finish) / finish) * 100}%`,
+                      backgroundColor: HORSE_COLORS[seat],
+                    }}
+                  />
+                </span>
+              )}
               <span
                 className={`w-[5.25rem] shrink-0 whitespace-nowrap text-right text-xs tabular-nums ${
                   done ? "font-semibold text-mongol-gold-light" : "text-white/60"
@@ -574,6 +603,227 @@ export function RankingList({
             </li>
           );
         })}
+      </ol>
+    </div>
+  );
+}
+
+/** Шагайн мөр + үр дүнгийн үг + том товч. Шодолт, уралдаан хоёуланд нь. */
+export function RollPanel({
+  roll,
+  rolling,
+  berkh = false,
+  lead,
+  message,
+  detail,
+  button,
+}: {
+  roll: Side[] | null;
+  rolling: boolean;
+  berkh?: boolean;
+  /** Өгвөл шагайн мөрийн оронд харуулна. */
+  lead?: ReactNode;
+  message: string;
+  detail?: string | null;
+  /** onClick байхгүй бол товч идэвхгүй. */
+  button: { label: string; onClick?: () => void };
+}) {
+  return (
+    <div className={`flex flex-col items-center gap-3 p-4 text-center ${CARD}`}>
+      {lead ?? <ShagaiRow roll={roll} rolling={rolling} berkh={berkh} />}
+      <div className="flex min-h-[3.25rem] flex-col justify-center" aria-live="polite">
+        <p className="text-lg font-bold leading-snug text-white">{message}</p>
+        {detail && <p className="text-sm leading-snug text-white/60">{detail}</p>}
+      </div>
+      <button
+        type="button"
+        disabled={!button.onClick}
+        onClick={button.onClick}
+        className={`w-full touch-manipulation py-4 text-lg ${PRIMARY_BUTTON}`}
+      >
+        {button.label}
+      </button>
+    </div>
+  );
+}
+
+/** Уралдааны толгой: хэний ээлж болохыг морьтой нь харуулна. */
+export function TurnHeader({
+  players,
+  seat,
+  label,
+  onShowRules,
+}: {
+  players: MoriPlayer[];
+  seat: number;
+  /** Нэрийн дээрх жижиг бичиг: "Ээлж", "Таны ээлж", "Түрүү магнай". */
+  label: string;
+  onShowRules: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <HorseToken
+          color={HORSE_COLORS[seat]}
+          label={horseLabel(players[seat].name)}
+          size={40}
+        />
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-widest text-mongol-gold-light/80">
+            {label}
+          </p>
+          <p className="truncate text-lg font-bold leading-tight text-white">
+            {players[seat].name}
+          </p>
+        </div>
+      </div>
+      <RulesButton onClick={onShowRules} />
+    </div>
+  );
+}
+
+export interface OpeningRow {
+  /** Харуулах хаялт (хараахан хаяагүй бол null). */
+  roll: Side[] | null;
+  /** "rolling" = одоо хаях ээлжтэй, "first" = эхлэгчээр тодорсон. */
+  mark?: "rolling" | "first" | null;
+  /** Энэ тойрогт оролцохгүй тул бүдэг харагдана. */
+  dim?: boolean;
+  offline?: boolean;
+}
+
+/** Эхлэх дарааллын шодолт: гарчиг, тэнцсэний мэдэгдэл, тоглогчдын хаялт. */
+export function OpeningBoard({
+  players,
+  rows,
+  tie,
+  youSeat,
+  onShowRules,
+}: {
+  players: MoriPlayer[];
+  rows: OpeningRow[];
+  /** Сүүлийн тойрог тэнцсэн бол: хэн, хэдэн морьтой. */
+  tie: { seats: number[]; horses: number } | null;
+  youSeat: number | null;
+  onShowRules: () => void;
+}) {
+  return (
+    <>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold text-white">Хэн эхлэх вэ?</h2>
+          <p className="text-xs leading-relaxed text-white/60">
+            Бүгд 4 шагай хаяна. Хамгийн олон морь буулгасан нь эхэлнэ.
+          </p>
+        </div>
+        <RulesButton onClick={onShowRules} />
+      </div>
+
+      {tie && (
+        <p
+          role="status"
+          className="rounded-xl border border-mongol-gold/40 bg-mongol-gold/10 px-3 py-2 text-center text-sm font-medium text-mongol-gold-light"
+        >
+          Тэнцлээ ({tie.horses} морь)!{" "}
+          {tie.seats.map((seat) => players[seat].name).join(", ")} дахин хаяна.
+        </p>
+      )}
+
+      <ul className="flex flex-col gap-2">
+        {players.map((player, seat) => {
+          const row = rows[seat];
+          return (
+            <li
+              key={seat}
+              className={`flex items-center gap-3 rounded-2xl border px-3 py-2 transition ${
+                row.mark === "first"
+                  ? "border-emerald-400 bg-emerald-500/15"
+                  : row.mark === "rolling"
+                    ? "border-mongol-gold bg-mongol-blue-light/70"
+                    : "border-white/10 bg-mongol-blue-light/40"
+              } ${row.dim ? "opacity-50" : ""}`}
+            >
+              <HorseToken
+                color={HORSE_COLORS[seat]}
+                label={horseLabel(player.name)}
+                size={30}
+              />
+              <span className="flex min-w-0 flex-1 items-center gap-1.5 font-semibold text-white">
+                <span className="truncate">{player.name}</span>
+                {player.isComputer && <span aria-hidden>🤖</span>}
+                {seat === youSeat && <span className={YOU_BADGE}>та</span>}
+                {row.offline && <span className={OFFLINE_BADGE}>холболтгүй</span>}
+                {row.mark === "first" && (
+                  <span className={`${BADGE} bg-emerald-500/20 text-emerald-200`}>
+                    эхэлнэ
+                  </span>
+                )}
+              </span>
+              {row.roll ? (
+                <>
+                  <span className="text-sm tracking-tight" aria-hidden>
+                    {row.roll.map((side) => SIDE_EMOJI[side]).join("")}
+                  </span>
+                  <span className="w-14 shrink-0 text-right text-sm font-bold tabular-nums text-mongol-gold-light">
+                    {countHorses(row.roll)} морь
+                  </span>
+                </>
+              ) : (
+                <span className="w-14 shrink-0 text-right text-sm text-white/30">–</span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </>
+  );
+}
+
+/** Уралдаан дууссаны дараах байрын жагсаалт (1-р байр, 2-р байр ...). */
+export function FinalPlaces({
+  players,
+  places,
+  youSeat,
+}: {
+  players: MoriPlayer[];
+  /** Суудлууд байрын дарааллаар. */
+  places: number[];
+  youSeat: number | null;
+}) {
+  return (
+    <div className={`flex w-full flex-col gap-3 p-4 ${CARD}`}>
+      <p className="text-sm uppercase tracking-widest text-mongol-gold-light/80">
+        Эцсийн байр
+      </p>
+      <ol className="flex flex-col gap-3">
+        {places.map((seat, index) => (
+          <li key={seat} className="flex items-center gap-3">
+            <span
+              className={`w-[4.5rem] shrink-0 whitespace-nowrap text-sm font-bold tabular-nums ${
+                index === 0 ? "text-mongol-gold-light" : "text-white/60"
+              }`}
+            >
+              {index + 1}-р байр
+            </span>
+            <HorseToken
+              color={HORSE_COLORS[seat]}
+              label={horseLabel(players[seat].name)}
+              size={28}
+            />
+            <span className="min-w-0 flex-1">
+              <span className="flex items-center gap-1.5 font-semibold text-white">
+                <span className="truncate">{players[seat].name}</span>
+                {players[seat].isComputer && <span aria-hidden>🤖</span>}
+                {seat === youSeat && <span className={YOU_BADGE}>та</span>}
+              </span>
+              {index === 0 && (
+                <span className="block text-xs font-semibold text-mongol-gold-light">
+                  🏆 Түрүү магнай
+                </span>
+              )}
+            </span>
+          </li>
+        ))}
       </ol>
     </div>
   );

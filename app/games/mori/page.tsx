@@ -1,6 +1,7 @@
 import Link from "next/link";
 import SiteHeader from "@/components/SiteHeader";
 import MoriGame from "@/components/games/MoriGame";
+import { isOnlineConfigured } from "@/lib/supabaseAdmin";
 
 export const metadata = {
   title: "Морь уралдуулах — Тоглоомын Тавцан",
@@ -20,7 +21,7 @@ export default function MoriPage() {
           <span className="w-12" />
         </div>
 
-        <MoriGame />
+        <MoriGame onlineEnabled={isOnlineConfigured()} />
       </main>
     </div>
   );
